@@ -7,6 +7,8 @@ install_dir="${FLUXGLASS_INSTALL_DIR:-/opt/fluxglass}"
 container="fluxglass-yandex"
 image="fluxglass-yandex:local"
 doc_url="${FLUXGLASS_DOC_URL:-${1:-}}"
+encryption_key="${FLUXGLASS_ENCRYPTION_KEY:-}"
+key_file="$install_dir/encryption-key"
 
 fail() {
     printf 'ERROR: %s\n' "$1" >&2
@@ -19,6 +21,7 @@ case "$doc_url" in
     https://disk.yandex.*/*|https://yadi.sk/*) ;;
     *) fail "unsupported Yandex document URL" ;;
 esac
+[ -z "$encryption_key" ] || [ "${#encryption_key}" -ge 16 ] || fail "encryption key must contain at least 16 characters"
 printf 'PROGRESS=5|Проверка сервера\n'
 
 install_docker() {
@@ -79,6 +82,7 @@ printf 'PROGRESS=65|Контейнер собран\n'
 timestamp="$(date +%Y%m%d-%H%M%S)"
 backup_dir="$install_dir/backups/$timestamp"
 mkdir -p "$backup_dir"
+[ ! -f "$key_file" ] || cp -p "$key_file" "$backup_dir/encryption-key"
 printf 'PROGRESS=72|Резервная копия текущей установки\n'
 legacy_active=0
 if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet openflux-yandex.service; then
@@ -93,10 +97,20 @@ fi
 
 restore_previous() {
     docker rm -f "$container" >/dev/null 2>&1 || true
+    if [ -f "$backup_dir/encryption-key" ]; then
+        cp -p "$backup_dir/encryption-key" "$key_file"
+    else
+        rm -f "$key_file"
+    fi
     if [ "$had_container" -eq 1 ] && [ -n "$old_doc_url" ]; then
+        old_key_args=""
+        if [ -f "$key_file" ]; then
+            old_key_args="-v $key_file:/run/secrets/greengrass-key:ro -e ENCRYPTION_KEY_FILE=/run/secrets/greengrass-key"
+        fi
         docker run -d --name "$container" --restart unless-stopped \
             --label io.fluxglass.managed=true --cap-add NET_RAW --cap-add NET_ADMIN \
             -e ROLE=exit-node -e TRANSPORT=auto -e EXIT_MODE=l4 -e URL="$old_doc_url" \
+            $old_key_args \
             fluxglass-yandex:rollback >/dev/null
     elif [ "$legacy_active" -eq 1 ]; then
         systemctl enable --now openflux-yandex.service
@@ -106,9 +120,19 @@ restore_previous() {
 mkdir -p "$install_dir"
 printf '%s\n' "$doc_url" > "$install_dir/document-url"
 chmod 600 "$install_dir/document-url"
+if [ -n "$encryption_key" ]; then
+    printf '%s\n' "$encryption_key" > "$key_file"
+    chmod 600 "$key_file"
+else
+    rm -f "$key_file"
+fi
 
 docker rm -f "$container" >/dev/null 2>&1 || true
 printf 'PROGRESS=80|Запуск GreenGrass на сервере\n'
+key_args=""
+if [ -f "$key_file" ]; then
+    key_args="-v $key_file:/run/secrets/greengrass-key:ro -e ENCRYPTION_KEY_FILE=/run/secrets/greengrass-key"
+fi
 if ! docker run -d \
     --name "$container" \
     --restart unless-stopped \
@@ -119,6 +143,7 @@ if ! docker run -d \
     -e TRANSPORT=auto \
     -e EXIT_MODE=l4 \
     -e URL="$doc_url" \
+    $key_args \
     "$image" >/dev/null; then
     restore_previous
     fail "container start failed; previous OpenFlux service restored"

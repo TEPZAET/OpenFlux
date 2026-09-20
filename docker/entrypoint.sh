@@ -53,6 +53,9 @@ if [ -n "${LOCAL_IP:-}" ]; then
   # unnecessary.
   set -- "$@" --local-ip "$LOCAL_IP"
 fi
+if [ -n "${ENCRYPTION_KEY_FILE:-}" ]; then
+  set -- "$@" --encryption-key-file "$ENCRYPTION_KEY_FILE"
+fi
 case "${DEBUG:-0}" in
   1|true|yes) set -- "$@" --debug ;;
 esac
