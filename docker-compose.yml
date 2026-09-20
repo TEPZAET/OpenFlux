@@ -43,6 +43,7 @@ services:
       MAX_TOKEN: ${MAX_TOKEN:-}
       MAX_UID: ${MAX_UID:-}
       LOCAL_IP: ${EXIT_LOCAL_IP:-}
+      EXIT_MODE: ${EXIT_MODE:-l4}
       DEBUG: ${DEBUG:-0}
     cap_add:
       - NET_RAW

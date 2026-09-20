@@ -12,6 +12,7 @@ set -eu
 role="${ROLE:-client}"
 transport="${TRANSPORT:-auto}"
 listen="${SOCKS5_LISTEN:-:1080}"
+mode="${EXIT_MODE:-l4}"
 
 case "$role" in
   client|exit-node) ;;
@@ -33,6 +34,8 @@ set -- "--$role" --transport "$transport"
 
 if [ "$role" = client ]; then
   set -- "$@" --socks5 "$listen"
+else
+  set -- "$@" --mode "$mode"
 fi
 
 if [ -n "${URL:-}" ]; then

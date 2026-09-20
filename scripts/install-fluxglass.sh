@@ -87,6 +87,7 @@ if ! docker run -d \
     --cap-add NET_ADMIN \
     -e ROLE=exit-node \
     -e TRANSPORT=auto \
+    -e EXIT_MODE=l4 \
     -e URL="$doc_url" \
     "$image" >/dev/null; then
     if [ "$legacy_active" -eq 1 ]; then
