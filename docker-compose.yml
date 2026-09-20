@@ -21,7 +21,7 @@ services:
     profiles: [client]
     environment:
       ROLE: client
-      TRANSPORT: ${TRANSPORT:-yandex}
+      TRANSPORT: ${TRANSPORT:-auto}
       URL: ${DOC_URL:-}
       MAX_TOKEN: ${MAX_TOKEN:-}
       MAX_UID: ${MAX_UID:-}
@@ -38,7 +38,7 @@ services:
     profiles: [exit-node]
     environment:
       ROLE: exit-node
-      TRANSPORT: ${TRANSPORT:-yandex}
+      TRANSPORT: ${TRANSPORT:-auto}
       URL: ${DOC_URL:-}
       MAX_TOKEN: ${MAX_TOKEN:-}
       MAX_UID: ${MAX_UID:-}

@@ -87,7 +87,7 @@ func main() {
 
 	role := flag.String("role", roleClient, "client | exit | bench-send | bench-sink")
 	inbound := flag.String("inbound", "", "tun | socks5 (client only; default: tun on macOS, socks5 elsewhere)")
-	transportType := flag.String("transport", "yandex", "Transport type (yandex, vyandex, oneme, cupsonline, mailru)")
+	transportType := flag.String("transport", "auto", "Transport type (auto, yandex, vyandex, oneme, cupsonline, mailru)")
 	mode := flag.String("mode", "", "Exit-node mode: l3 (default, Linux only) or l4 (works everywhere)")
 
 	codec := flag.String("codec", codecBatched, "batched (default, zstd+coalescing) or legacy (per-packet LZ4)")
@@ -278,10 +278,20 @@ DEPRECATED (removed in v2)
 		log.Printf("Exit mode: %s", exitMode.String())
 	}
 
+	resolvedTransport := *transportType
+	if resolvedTransport == "auto" {
+		var err error
+		resolvedTransport, err = yandex.DetectDocumentTransport(globalDocUrl)
+		if err != nil {
+			log.Fatalf("Detect Yandex document transport: %v", err)
+		}
+		log.Printf("Yandex document mode: %s", resolvedTransport)
+	}
+
 	config := transport.DefaultConfig()
 	var inner transport.Transport
 
-	switch *transportType {
+	switch resolvedTransport {
 	case "vyandex":
 		inner = yandex.NewYandexVolgaTransport(globalDocUrl, config)
 	case "yandex":

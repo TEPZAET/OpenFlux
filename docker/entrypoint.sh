@@ -10,7 +10,7 @@
 set -eu
 
 role="${ROLE:-client}"
-transport="${TRANSPORT:-yandex}"
+transport="${TRANSPORT:-auto}"
 listen="${SOCKS5_LISTEN:-:1080}"
 
 case "$role" in
@@ -22,9 +22,9 @@ case "$role" in
 esac
 
 case "$transport" in
-  yandex|vyandex|oneme) ;;
+  auto|yandex|vyandex|oneme) ;;
   *)
-    echo "TRANSPORT must be one of yandex, vyandex, oneme (got '$transport')" >&2
+    echo "TRANSPORT must be one of auto, yandex, vyandex, oneme (got '$transport')" >&2
     exit 2
     ;;
 esac
