@@ -46,6 +46,17 @@ install_docker() {
 install_docker
 docker info >/dev/null 2>&1 || fail "Docker daemon is unavailable"
 
+had_container=0
+old_doc_url=""
+if docker inspect "$container" >/dev/null 2>&1; then
+    had_container=1
+    old_image="$(docker inspect -f '{{.Image}}' "$container")"
+    docker tag "$old_image" fluxglass-yandex:rollback
+    if [ -f "$install_dir/document-url" ]; then
+        old_doc_url="$(cat "$install_dir/document-url")"
+    fi
+fi
+
 work_dir="$(mktemp -d /tmp/fluxglass-install.XXXXXX)"
 cleanup() {
     rm -rf "$work_dir"
@@ -74,6 +85,18 @@ if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet openflux-
     systemctl disable openflux-yandex.service >/dev/null 2>&1 || true
 fi
 
+restore_previous() {
+    docker rm -f "$container" >/dev/null 2>&1 || true
+    if [ "$had_container" -eq 1 ] && [ -n "$old_doc_url" ]; then
+        docker run -d --name "$container" --restart unless-stopped \
+            --label io.fluxglass.managed=true --cap-add NET_RAW --cap-add NET_ADMIN \
+            -e ROLE=exit-node -e TRANSPORT=auto -e EXIT_MODE=l4 -e URL="$old_doc_url" \
+            fluxglass-yandex:rollback >/dev/null
+    elif [ "$legacy_active" -eq 1 ]; then
+        systemctl enable --now openflux-yandex.service
+    fi
+}
+
 mkdir -p "$install_dir"
 printf '%s\n' "$doc_url" > "$install_dir/document-url"
 chmod 600 "$install_dir/document-url"
@@ -90,22 +113,23 @@ if ! docker run -d \
     -e EXIT_MODE=l4 \
     -e URL="$doc_url" \
     "$image" >/dev/null; then
-    if [ "$legacy_active" -eq 1 ]; then
-        systemctl enable --now openflux-yandex.service
-    fi
+    restore_previous
     fail "container start failed; previous OpenFlux service restored"
 fi
 
 sleep 5
 if ! docker inspect -f '{{.State.Running}}' "$container" 2>/dev/null | grep -q true; then
     docker logs "$container" >&2 || true
-    docker rm -f "$container" >/dev/null 2>&1 || true
-    if [ "$legacy_active" -eq 1 ]; then
-        systemctl enable --now openflux-yandex.service
-    fi
+    restore_previous
     fail "container stopped during startup; previous OpenFlux service restored"
 fi
 
-detected="$(docker logs "$container" 2>&1 | sed -n 's/.*Yandex document mode: \([^ ]*\).*/\1/p' | tail -n 1)"
+detected=""
+attempt=0
+while [ -z "$detected" ] && [ "$attempt" -lt 15 ]; do
+    detected="$(docker logs "$container" 2>&1 | sed -n 's/.*Yandex document mode: \([^ ]*\).*/\1/p' | tail -n 1)"
+    [ -n "$detected" ] || sleep 2
+    attempt=$((attempt + 1))
+done
 [ -n "$detected" ] || detected="pending"
 printf 'OK\nCONTAINER=%s\nTRANSPORT=%s\nBACKUP=%s\n' "$container" "$detected" "$backup_dir"
