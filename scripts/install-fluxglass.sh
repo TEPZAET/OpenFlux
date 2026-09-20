@@ -19,6 +19,7 @@ case "$doc_url" in
     https://disk.yandex.*/*|https://yadi.sk/*) ;;
     *) fail "unsupported Yandex document URL" ;;
 esac
+printf 'PROGRESS=5|Проверка сервера\n'
 
 install_docker() {
     if command -v docker >/dev/null 2>&1; then
@@ -45,6 +46,7 @@ install_docker() {
 
 install_docker
 docker info >/dev/null 2>&1 || fail "Docker daemon is unavailable"
+printf 'PROGRESS=15|Docker готов\n'
 
 had_container=0
 old_doc_url=""
@@ -64,16 +66,20 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 archive="$work_dir/source.tar.gz"
+printf 'PROGRESS=22|Загрузка серверной части\n'
 curl -fL --retry 3 --connect-timeout 15 \
     "https://github.com/$repo/archive/refs/heads/$ref.tar.gz" -o "$archive"
 mkdir "$work_dir/source"
 tar -xzf "$archive" -C "$work_dir/source" --strip-components=1
 
+printf 'PROGRESS=30|Сборка контейнера\n'
 docker build -t "$image" "$work_dir/source"
+printf 'PROGRESS=65|Контейнер собран\n'
 
 timestamp="$(date +%Y%m%d-%H%M%S)"
 backup_dir="$install_dir/backups/$timestamp"
 mkdir -p "$backup_dir"
+printf 'PROGRESS=72|Резервная копия текущей установки\n'
 legacy_active=0
 if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet openflux-yandex.service; then
     legacy_active=1
@@ -102,6 +108,7 @@ printf '%s\n' "$doc_url" > "$install_dir/document-url"
 chmod 600 "$install_dir/document-url"
 
 docker rm -f "$container" >/dev/null 2>&1 || true
+printf 'PROGRESS=80|Запуск GreenGrass на сервере\n'
 if ! docker run -d \
     --name "$container" \
     --restart unless-stopped \
@@ -118,6 +125,7 @@ if ! docker run -d \
 fi
 
 sleep 5
+printf 'PROGRESS=90|Проверка запуска\n'
 if ! docker inspect -f '{{.State.Running}}' "$container" 2>/dev/null | grep -q true; then
     docker logs "$container" >&2 || true
     restore_previous
@@ -132,4 +140,5 @@ while [ -z "$detected" ] && [ "$attempt" -lt 15 ]; do
     attempt=$((attempt + 1))
 done
 [ -n "$detected" ] || detected="pending"
+printf 'PROGRESS=100|Сервер готов\n'
 printf 'OK\nCONTAINER=%s\nTRANSPORT=%s\nBACKUP=%s\n' "$container" "$detected" "$backup_dir"
